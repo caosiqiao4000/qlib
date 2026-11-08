@@ -50,7 +50,7 @@ def main():
     }
     dataset = init_instance_by_config(dataset_config)
 
-    mlruns_dir = Path(__file__).parent / "mlruns"
+    mlruns_dir = Path(__file__).parent.parent / "mlruns"
 
     pred_pkl_files = sorted(mlruns_dir.rglob("pred.pkl"), key=lambda p: p.stat().st_mtime, reverse=True)
 
