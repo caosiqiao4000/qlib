@@ -58,6 +58,16 @@ SAFE_PICKLE_CLASSES: Set[Tuple[str, str]] = {
     ("qlib.data.dataset.handler", "DataHandler"),
     ("qlib.data.dataset.handler", "DataHandlerLP"),
     ("qlib.data.dataset.loader", "StaticDataLoader"),
+    ("qlib.data.dataset.weight", "Reweighter"),
+    # qlib model classes
+    ("qlib.contrib.model.gbdt", "LGBModel"),
+    # lightgbm internal
+    ("lightgbm", "Booster"),
+    ("lightgbm.basic", "Booster"),
+    # qlib backtest position classes
+    ("qlib.backtest.position", "BasePosition"),
+    ("qlib.backtest.position", "Position"),
+    ("qlib.backtest.position", "InfPosition"),
     # NumPy reconstruction primitives. Keep this list explicit: trusting the
     # whole numpy namespace would also expose functions such as numpy.load.
     ("numpy", "ndarray"),
@@ -82,31 +92,45 @@ SAFE_PICKLE_CLASSES: Set[Tuple[str, str]] = {
     # Pandas reconstruction primitives used by Series/DataFrame pickles.
     # These entries are deliberately exact. I/O helpers such as
     # pandas.read_pickle must never be added here.
+    # Pandas 2.x uses deep module paths; pandas 3.x re-exports from top-level.
     ("pandas.core.series", "Series"),
+    ("pandas", "Series"),
     ("pandas.core.frame", "DataFrame"),
+    ("pandas", "DataFrame"),
     ("pandas.core.internals.managers", "BlockManager"),
     ("pandas.core.internals.managers", "SingleBlockManager"),
     ("pandas.core.internals.blocks", "new_block"),
     ("pandas._libs.internals", "_unpickle_block"),
     ("pandas.core.indexes.base", "_new_Index"),
     ("pandas.core.indexes.base", "Index"),
+    ("pandas", "Index"),
     ("pandas.core.indexes.range", "RangeIndex"),
+    ("pandas", "RangeIndex"),
     ("pandas.core.indexes.multi", "MultiIndex"),
+    ("pandas", "MultiIndex"),
     ("pandas.core.indexes.datetimes", "_new_DatetimeIndex"),
     ("pandas.core.indexes.datetimes", "DatetimeIndex"),
+    ("pandas", "DatetimeIndex"),
     ("pandas.core.indexes.timedeltas", "TimedeltaIndex"),
+    ("pandas", "TimedeltaIndex"),
     ("pandas.core.indexes.period", "PeriodIndex"),
+    ("pandas", "PeriodIndex"),
     ("pandas.core.indexes.interval", "_new_IntervalIndex"),
     ("pandas.core.indexes.interval", "IntervalIndex"),
+    ("pandas", "IntervalIndex"),
     ("pandas._libs.tslibs.timestamps", "_unpickle_timestamp"),
     ("pandas._libs.tslibs.timestamps", "Timestamp"),
     ("pandas._libs.tslibs.timedeltas", "Timedelta"),
     ("pandas._libs.tslibs.period", "Period"),
     ("pandas._libs.arrays", "__pyx_unpickle_NDArrayBacked"),
     ("pandas.core.arrays.datetimes", "DatetimeArray"),
+    ("pandas.arrays", "DatetimeArray"),
     ("pandas.core.arrays.timedeltas", "TimedeltaArray"),
+    ("pandas.arrays", "TimedeltaArray"),
     ("pandas.core.arrays.period", "PeriodArray"),
+    ("pandas.arrays", "PeriodArray"),
     ("pandas.core.arrays.categorical", "Categorical"),
+    ("pandas.arrays", "Categorical"),
     ("pandas.core.dtypes.dtypes", "CategoricalDtype"),
     ("pandas.core.dtypes.dtypes", "PeriodDtype"),
     ("pandas.core.dtypes.dtypes", "IntervalDtype"),
@@ -161,6 +185,13 @@ SAFE_PICKLE_CLASSES: Set[Tuple[str, str]] = {
     ("pandas.core.arrays.boolean", "BooleanDtype"),
     ("pandas.core.arrays.string_", "StringArray"),
     ("pandas.core.arrays.string_", "StringDtype"),
+    ("pandas", "StringArray"),
+    ("pandas", "StringDtype"),
+    # pandas 3.x PyArrow-backed string arrays
+    ("pandas.arrays", "ArrowStringArray"),
+    ("pyarrow.lib", "_restore_array"),
+    ("pyarrow.lib", "type_for_alias"),
+    ("pyarrow.lib", "py_buffer"),
 }
 
 
