@@ -99,7 +99,7 @@ def _get_monthly_analysis_with_feature(monthly_df: pd.DataFrame, feature: str = 
     :param feature:
     :return:
     """
-    _monthly_df_gp = monthly_df.reset_index().groupby(["level_1"], group_keys=False)
+    _monthly_df_gp = monthly_df.reset_index().groupby("level_1", group_keys=False)
 
     _name_df = _monthly_df_gp.get_group(feature).set_index(["level_0", "level_1"])
     _temp_df = _name_df.pivot_table(index="date", values=["risk"], columns=_name_df.index)

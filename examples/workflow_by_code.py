@@ -8,6 +8,12 @@ Qlib provides two kinds of interfaces.
 The interface of (1) is `qrun XXX.yaml`.  The interface of (2) is script like this, which nearly does the same thing as `qrun XXX.yaml`
 """
 
+import os
+
+# MLflow 3.12+ disables the local file-store backend by default.
+# The example uses the default file-store tracking URI, so opt back in.
+os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
+
 import qlib
 from qlib.constant import REG_CN
 from qlib.utils import init_instance_by_config, flatten_dict
@@ -62,7 +68,7 @@ if __name__ == "__main__":
     # NOTE: This line is optional
     # It demonstrates that the dataset can be used standalone.
     example_df = dataset.prepare("train")
-    print(example_df.head())
+    print("example_df.head():", example_df.head())
 
     # start exp
     with R.start(experiment_name="workflow"):
