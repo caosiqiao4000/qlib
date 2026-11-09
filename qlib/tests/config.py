@@ -67,7 +67,7 @@ def get_data_handler_config(
 
 
 def get_dataset_config(
-    dataset_class=DATASET_ALPHA158_CLASS,
+    dataset_class=DATASET_ALPHA360_CLASS,
     train=("2008-01-01", "2014-12-31"),
     valid=("2015-01-01", "2016-12-31"),
     test=("2017-01-01", "2020-08-01"),
