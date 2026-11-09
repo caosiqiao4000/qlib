@@ -67,7 +67,7 @@ class CatBoostModel(Model, FeatureInt):
         self._params["iterations"] = num_boost_round
         self._params["early_stopping_rounds"] = early_stopping_rounds
         self._params["verbose_eval"] = verbose_eval
-        self._params["task_type"] = "GPU" if get_gpu_device_count() > 0 else "CPU"
+        self._params.setdefault("task_type", "GPU" if get_gpu_device_count() > 0 else "CPU")
         self.model = CatBoost(self._params, **kwargs)
 
         # train the model
