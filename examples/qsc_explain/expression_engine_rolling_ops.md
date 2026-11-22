@@ -190,39 +190,74 @@ print(df.head())
 
 ---
 
-### Alpha158 滚动类因子一览 / Alpha158 Rolling Factor Composition
+### Alpha158 完整因子清单 / Alpha158 Complete Feature List
 
-| 因子名 | 算子 | 窗口 | 说明 |
+> 默认配置共 **158** 个因子 = **9** 个 KBAR 特征 + **4** 个原始价格特征 + **145** 个滚动特征 (29 个算子 × 5 个窗口)。
+> Default config yields **158** features = **9** KBAR + **4** raw price + **145** rolling features (29 operators × 5 windows).
+
+#### KBAR 特征 / KBAR Features (9)
+
+> 基于单根 K 线的形态特征。`Greater(a, b)` = max(a, b)，`Less(a, b)` = min(a, b)。
+> Bar-shape features derived from a single candlestick. `Greater(a, b)` = max(a, b), `Less(a, b)` = min(a, b).
+
+| 因子 / Name | 公式 / Formula | 说明 / Description |
+|--------|------|------|
+| KMID | `($close-$open)/$open` | K 线中价涨跌幅 / midline return vs open |
+| KLEN | `($high-$low)/$open` | K 线长度(振幅) / bar length (range) vs open |
+| KMID2 | `($close-$open)/($high-$low+1e-12)` | 中价在区间中的位置 / midline position in range |
+| KUP | `($high-Greater($open,$close))/$open` | 上影线长度 / upper shadow length |
+| KUP2 | `($high-Greater($open,$close))/($high-$low+1e-12)` | 上影线占比 / upper shadow ratio |
+| KLOW | `(Less($open,$close)-$low)/$open` | 下影线长度 / lower shadow length |
+| KLOW2 | `(Less($open,$close)-$low)/($high-$low+1e-12)` | 下影线占比 / lower shadow ratio |
+| KSFT | `(2*$close-$high-$low)/$open` | 收盘价相对区间位置 / close position in range |
+| KSFT2 | `(2*$close-$high-$low)/($high-$low+1e-12)` | 收盘价位置占比 / close position ratio |
+
+#### 原始价格/成交量特征 / Raw Price & Volume Features
+
+> 默认 price 配置 `windows=[0]`, `feature=[OPEN, HIGH, LOW, VWAP]` → 4 个因子；`volume` 默认关闭，启用后按 `windows` 生成。
+> Default `price` config `windows=[0]`, `feature=[OPEN, HIGH, LOW, VWAP]` → 4 features; `volume` is off by default.
+
+| 因子 / Name | 公式 / Formula | 说明 / Description |
+|--------|------|------|
+| OPEN0 | `$open/$close` | 开盘价(除以收盘价归一) / open price (normalized by close) |
+| HIGH0 | `$high/$close` | 最高价 / high price |
+| LOW0 | `$low/$close` | 最低价 / low price |
+| VWAP0 | `$vwap/$close` | 成交均价 / volume-weighted average price |
+| VOLUME0..4 | `Ref($volume, d)/($volume+1e-12)` | 成交量(可选, 默认关闭) / volume (optional, off by default) |
+
+#### 滚动特征 / Rolling Features (29 × 5 = 145)
+
+| 因子 / Name | 公式 / Formula | 窗口 / Windows | 说明 / Description |
 |--------|------|------|------|
-| ROC | `Ref($close, d) / $close` | 5,10,20,30,60 | Rate of Change / 涨跌幅 |
-| MA | `Mean($close, d) / $close` | 5,10,20,30,60 | Moving Average / 均线 |
-| STD | `Std($close, d) / $close` | 5,10,20,30,60 | 标准差 / 波动率 |
-| BETA | `Slope($close, d) / $close` | 5,10,20,30,60 | 线性斜率 / 趋势 |
-| RSQR | `Rsquare($close, d)` | 5,10,20,30,60 | R² / 线性度 |
-| RESI | `Resi($close, d) / $close` | 5,10,20,30,60 | 残差 |
-| MAX | `Max($high, d) / $close` | 5,10,20,30,60 | 最高价 |
-| MIN | `Min($low, d) / $close` | 5,10,20,30,60 | 最低价 |
-| QTLU | `Quantile($close, d, 0.8) / $close` | 5,10,20,30,60 | 上 80% 分位 |
-| QTLD | `Quantile($close, d, 0.2) / $close` | 5,10,20,30,60 | 下 20% 分位 |
-| RANK | `Rank($close, d)` | 5,10,20,30,60 | 百分位 |
-| RSV | 组合公式 | 5,10,20,30,60 | Raw Stochastic Value |
-| IMAX | `IdxMax($high, d) / d` | 5,10,20,30,60 | 新高距今 |
-| IMIN | `IdxMin($low, d) / d` | 5,10,20,30,60 | 新低距今 |
-| IMXD | 组合公式 | 5,10,20,30,60 | IMAX - IMIN |
-| CORR | `Corr($close, Log($volume+1), d)` | 5,10,20,30,60 | 价格-量相关性 |
-| CORD | `Corr(r1, r2, d)` | 5,10,20,30,60 | 涨跌幅-量比相关性 |
-| CNTP | `Mean($close > Ref($close,1), d)` | 5,10,20,30,60 | 上涨天数占比 |
-| CNTN | `Mean($close < Ref($close,1), d)` | 5,10,20,30,60 | 下跌天数占比 |
-| CNTD | CNTP - CNTN | 5,10,20,30,60 | 涨跌天数差 |
-| SUMP | 组合公式 | 5,10,20,30,60 | 总涨幅占比 (RSI-like) |
-| SUMN | 组合公式 | 5,10,20,30,60 | 总跌幅占比 |
-| SUMD | SUMP - SUMN | 5,10,20,30,60 | 涨跌幅差 |
-| VMA | `Mean($volume, d) / ($volume+1e-12)` | 5,10,20,30,60 | 量均线 |
-| VSTD | `Std($volume, d) / ($volume+1e-12)` | 5,10,20,30,60 | 量波动率 |
-| WVMA | 组合公式 | 5,10,20,30,60 | 成交量加权价格波动 |
-| VSUMP | 组合公式 | 5,10,20,30,60 | 量增占比 |
-| VSUMN | 组合公式 | 5,10,20,30,60 | 量减占比 |
-| VSUMD | VSUMP - VSUMN | 5,10,20,30,60 | 量增减差 |
+| ROC | `Ref($close, d)/$close` | 5,10,20,30,60 | Rate of Change / 涨跌幅 |
+| MA | `Mean($close, d)/$close` | 5,10,20,30,60 | Moving Average / 均线 |
+| STD | `Std($close, d)/$close` | 5,10,20,30,60 | 标准差 / 波动率 |
+| BETA | `Slope($close, d)/$close` | 5,10,20,30,60 | 线性斜率 / 趋势强度 |
+| RSQR | `Rsquare($close, d)` | 5,10,20,30,60 | 回归 R² / 趋势线性度 |
+| RESI | `Resi($close, d)/$close` | 5,10,20,30,60 | 回归残差 / 偏离趋势线程度 |
+| MAX | `Max($high, d)/$close` | 5,10,20,30,60 | 最高价 / 区间高点 |
+| MIN | `Min($low, d)/$close` | 5,10,20,30,60 | 最低价 / 区间低点 |
+| QTLU | `Quantile($close, d, 0.8)/$close` | 5,10,20,30,60 | 上 80% 分位 |
+| QTLD | `Quantile($close, d, 0.2)/$close` | 5,10,20,30,60 | 下 20% 分位 |
+| RANK | `Rank($close, d)` | 5,10,20,30,60 | 当前价百分位 (0~1) |
+| RSV | `($close-Min($low, d))/(Max($high, d)-Min($low, d)+1e-12)` | 5,10,20,30,60 | Raw Stochastic Value / 随机指标原始值 |
+| IMAX | `IdxMax($high, d)/d` | 5,10,20,30,60 | 新高距今占比 (Aroon Up) |
+| IMIN | `IdxMin($low, d)/d` | 5,10,20,30,60 | 新低距今占比 (Aroon Down) |
+| IMXD | `(IdxMax($high, d)-IdxMin($low, d))/d` | 5,10,20,30,60 | 新高-新低时间差 / Aroon 差值 |
+| CORR | `Corr($close, Log($volume+1), d)` | 5,10,20,30,60 | 价格-对数成交量相关性 |
+| CORD | `Corr($close/Ref($close,1), Log($volume/Ref($volume,1)+1), d)` | 5,10,20,30,60 | 涨跌幅-量比相关性 |
+| CNTP | `Mean($close>Ref($close,1), d)` | 5,10,20,30,60 | 上涨天数占比 |
+| CNTN | `Mean($close<Ref($close,1), d)` | 5,10,20,30,60 | 下跌天数占比 |
+| CNTD | `Mean($close>Ref($close,1), d)-Mean($close<Ref($close,1), d)` | 5,10,20,30,60 | 涨跌天数差 |
+| SUMP | `Sum(Greater($close-Ref($close,1),0), d)/(Sum(Abs($close-Ref($close,1)), d)+1e-12)` | 5,10,20,30,60 | 总涨幅占比 (RSI-like) |
+| SUMN | `Sum(Greater(Ref($close,1)-$close,0), d)/(Sum(Abs($close-Ref($close,1)), d)+1e-12)` | 5,10,20,30,60 | 总跌幅占比 (= 1 - SUMP) |
+| SUMD | `(Sum(Greater($close-Ref($close,1),0), d)-Sum(Greater(Ref($close,1)-$close,0), d))/(Sum(Abs($close-Ref($close,1)), d)+1e-12)` | 5,10,20,30,60 | 涨跌幅差占比 |
+| VMA | `Mean($volume, d)/($volume+1e-12)` | 5,10,20,30,60 | 量均线 |
+| VSTD | `Std($volume, d)/($volume+1e-12)` | 5,10,20,30,60 | 量波动率 |
+| WVMA | `Std(Abs($close/Ref($close,1)-1)*$volume, d)/(Mean(Abs($close/Ref($close,1)-1)*$volume, d)+1e-12)` | 5,10,20,30,60 | 成交量加权价格波动 |
+| VSUMP | `Sum(Greater($volume-Ref($volume,1),0), d)/(Sum(Abs($volume-Ref($volume,1)), d)+1e-12)` | 5,10,20,30,60 | 量增占比 |
+| VSUMN | `Sum(Greater(Ref($volume,1)-$volume,0), d)/(Sum(Abs($volume-Ref($volume,1)), d)+1e-12)` | 5,10,20,30,60 | 量减占比 (= 1 - VSUMP) |
+| VSUMD | `(Sum(Greater($volume-Ref($volume,1),0), d)-Sum(Greater(Ref($volume,1)-$volume,0), d))/(Sum(Abs($volume-Ref($volume,1)), d)+1e-12)` | 5,10,20,30,60 | 量增减差占比 |
 
 ---
 

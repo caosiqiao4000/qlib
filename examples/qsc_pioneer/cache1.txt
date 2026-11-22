@@ -1,0 +1,1314 @@
+//------------------------------------------------------------------------
+// 简称: Qsc_Stock_Sel_line2
+// 名称: AStock selection by MainBusinessRevenueGrowth ratio
+// 类别: 策略应用
+// 类型: 用户应用
+// 输出: Void
+// 20260302
+// 1.  The TTM-NrPE <  mainBusnessGrowRatio +
+//------------------------------------------------------------------------
+//
+//         注: 当前策略仅为做多系统, 如需做空, 请参见CL_MovingAverageCrossOver_S
+//----------------------------------------------------------------------//
+
+Params
+    Numeric appointedKLineLastDay(0);    // What is the last day of the appointment
+    Numeric grossProfitMarginMin(18);    // Gross Profit margin Lowest value
+    Numeric tbCapitalMin(50);            // Minimum tradable market Capitalization,unit: hundred Million
+    Integer defxxDaysAgoCanTrade(10);     // 默认 xx天 前可以开始交易,10天是考虑到春节,国庆长假---- 默认天数用于挑选股票,如果是持有的,要修改这个参数到60天左右
+    Numeric writelog(1);                 // 1写log,否则不写log
+    Enum<Bool> isTest([False,True]);                    // True 是测试,从 上市开头可以交易到尾
+
+Vars
+    Natural Array<String> otherStrtegyParamArray;
+    Natural Array<String> ultimateCalculateArray;
+
+    Global String fileDir("F:\\androidWorkSpace\\qscPrivate\\stock-calculator-ad\\doc\\history\\tb\\");
+    Dic<Array<Numeric>>   capitalSummary("TB_CAPITAL_SUMMARY");
+    Integer maxBackBar(100);
+    Natural String waveCurrentStatus("");
+    Natural String waveCurrentStatusPreOne("");
+    Natural String waveCurrentStatusPreTwo("");
+    Natural String waveCurrentStatusPreThree("");
+    Natural Integer waveLifeSmallOld(0);
+
+    Natural String wave2CurrentStatus("");
+    Natural String wave2CurrentStatusPreOne("");
+    Natural String wave2CurrentStatusPreTwo("");
+    Natural String wave2CurrentStatusPreThree("");
+    Natural Bool isWaveStateChange(False);
+    Natural Integer waveLifeBigOld(0);
+
+    Global Map<String,Numeric> mapStartOrderDate;
+    Global Array<String> arrayStartOrderDate;
+    Natural Bool isProhibatOpen(False);
+    Natural Numeric prohibatOpenDate(0);
+    Natural Numeric prohibitIndex(0);
+    
+
+Defs
+    Integer msgboxMore(Integer writelog, String msg,Bool needBlankLine)
+    {
+        //Qsc_msgbox(writelog,fileDir+FormulaName,msg,needBlankLine);
+        Return 0;
+    }
+    //写日志，方便代码调试
+    Integer msgbox(StringRef msg)
+    {
+        Return msgboxMore(0,msg,False);
+    }
+    Bool setProhibatStart(String flag,Numeric lastChatTime,Integer barIndex)
+    {
+        prohibatOpenDate = lastChatTime;
+        isProhibatOpen = True;
+        prohibitIndex = barIndex;
+        Commentary("xxxxxxx 1 prohibat from: "+flag+" "+Text(prohibatOpenDate));
+        Return True;
+    }
+    Bool immediatelyRisingStopPrice(String flag,Numeric lastChatTime,Integer barIndex,String stopStatus)
+    {
+        SetBarVar(FormulaName, "Sel*0*" + Symbol + "*" + SymbolName+"*"+stopStatus);
+        Commentary("xxxxxxx 2 prohibat from: "+flag+" " +Text(lastChatTime));
+        Return True;
+    }
+    
+    Integer calculateBarRishKByGrowth(Numeric psMultiNum,Numeric mainRenuveGrwoth)
+    {
+        If(psMultiNum <= 0)
+        {
+            Return 100;
+        }
+        Numeric rate = mainRenuveGrwoth / 100;
+        
+        Numeric current = 1;
+        Numeric increatingNum = 1 * (1 + rate);
+        
+        Numeric years = (psMultiNum - current)/increatingNum;
+        Return years;
+    }
+
+    Bool handleWaveSituation(
+        //Numeric peFast,Numeric peSlow,Numeric peBig,Numeric peCreditFast,Numeric peCreditBig,
+        Numeric npmContinuouslyUpValue,
+        Numeric npmSlowMA, Bool roeCondition,
+        Numeric npmFastCriditTrend, Numeric roeCreditFast,
+        Numeric mainBusinessRevenueGrowDiff,
+        Numeric mainBusinessRevenueGrowthRatio_recentRate,
+        Numeric mainBusinessRevenueGrowth_creditFast, Numeric mainBusinessRevenueGrowthRatio,
+        Numeric priceSafeCoefficient,Numeric priceFastMa,Numeric priceSlowMa,Numeric priceBigMa,
+        Numeric priceFastCredit,Numeric priceBigCredit,Numeric priceVelocityShort,Numeric priceVelocityBig,
+        Numeric saleRevenueCreditStatusBig,
+        Numeric saleRevenueCreditStatus_fast,Numeric saleRevenueGrowthTTM,
+        Numeric saleRevenueGrowthTTM_fastMA, Numeric saleRevenueGrowthTTM_slowMA,
+        Numeric saleRevenueGrowthTTM_bigMA,Numeric saleSafeRevenueCoefficient,
+        Numeric lastChatTime,Integer barIndex,Integer waveLifeSmall
+        ,Integer waveLifeBig
+    )
+    {
+        Bool isProhibatPosition = False;
+
+        Array<String> arrWaveStrBigPreThree;
+        StringSplit(wave2CurrentStatusPreThree, "-", arrWaveStrBigPreThree);//分割字符串
+        Array<String> arrWaveStrBigPreTwo;
+        StringSplit(wave2CurrentStatusPreTwo, "-", arrWaveStrBigPreTwo);//分割字符串
+        Array<String> arrWaveStrBigPreOne;
+        StringSplit(wave2CurrentStatusPreOne, "-", arrWaveStrBigPreOne);//分割字符串
+        Array<String> arrWaveStrBig;
+        StringSplit(wave2CurrentStatus, "-", arrWaveStrBig);//分割字符串
+        String waveBigS = arrWaveStrBigPreThree[0]+"-"+arrWaveStrBigPreTwo[0]+"-"+
+            arrWaveStrBigPreOne[0]+"-"+arrWaveStrBig[0];
+
+        Array<String> arrWaveStrSmallPreThree;
+        StringSplit(waveCurrentStatusPreThree, "-", arrWaveStrSmallPreThree);//分割字符串
+        Array<String> arrWaveStrSmallPreTwo;
+        StringSplit(waveCurrentStatusPreTwo, "-", arrWaveStrSmallPreTwo);//分割字符串
+        Array<String> arrWaveStrSmallPreOne;
+        StringSplit(waveCurrentStatusPreOne, "-", arrWaveStrSmallPreOne);//分割字符串
+        Array<String> arrWaveStrSmall;
+        StringSplit(waveCurrentStatus, "-", arrWaveStrSmall);//分割字符串
+        String waveSmallS = arrWaveStrSmallPreThree[0]+"-"+arrWaveStrSmallPreTwo[0]+"-"+
+            arrWaveStrSmallPreOne[0]+"-"+arrWaveStrSmall[0];
+
+        Commentary("--> arrWaveStrBigPreTwo: "+TextArray(arrWaveStrBigPreTwo)+" arrWaveStrBigPreOne: "+TextArray(arrWaveStrBigPreOne)
+            +" arrWaveStrBig: "+TextArray(arrWaveStrBig)+" arrWaveStrSmall: "+TextArray(arrWaveStrSmall));
+        String stopStatusStr = "NORMAL";
+        /*If(npmContinuouslyUpValue / npmSlowMA < -0.01 && priceFastCredit < 0)
+        {
+            stopStatusStr = "URGENT";
+        }*/
+        Bool conditionSmall_1 =   arrWaveStrSmallPreThree[0] == "U平高" && arrWaveStrSmallPreTwo[0] == "D高高"
+                && arrWaveStrSmallPreOne[0] == "U高平" && arrWaveStrSmall[0] == "D高平";
+        Bool conditionSmall_2 =   arrWaveStrSmallPreThree[0] == "U高高" && arrWaveStrSmallPreTwo[0] == "D高高"
+                && arrWaveStrSmallPreOne[0] == "U高平" && arrWaveStrSmall[0] == "D高高";
+                
+        Bool conditionSmall_3 =   arrWaveStrSmallPreThree[0] == "U^平" && arrWaveStrSmallPreTwo[0] == "U高平"
+                && arrWaveStrSmallPreOne[0] == "U高高" && arrWaveStrSmall[0] == "D高高";
+                
+        Bool conditionSmall_dgp1 = arrWaveStrSmallPreThree[0] == "U^高" && arrWaveStrSmallPreTwo[0] == "U高平"
+                && arrWaveStrSmallPreOne[0] == "D高高" && arrWaveStrSmall[0] == "D高平";
+        
+        Bool conditionSmall_dpg1 = arrWaveStrSmallPreThree[0] == "U高高" && arrWaveStrSmallPreTwo[0] == "D平高"
+                && arrWaveStrSmallPreOne[0] == "U高高" && arrWaveStrSmall[0] == "D平高";
+        If(Len(wave2CurrentStatus) < 6)
+        {
+            If(conditionSmall_1 || conditionSmall_2)
+            {
+                immediatelyRisingStopPrice("xxxxxxxxxxx  inversion to down. "+waveBigS,lastChatTime,barIndex,"URGENT");
+            }
+        }
+
+        // =====================================================================
+        // Immediately-exit patterns. Grouped first by the current big-wave state
+        // (arrWaveStrBig[0]), then by the preceding state (arrWaveStrBigPreOne[0]).
+        // =====================================================================
+
+        // ---- current big-wave: D高高 ----
+        If(arrWaveStrBig[0] == "D高高")
+        {
+            If(conditionSmall_dgp1)
+            {
+                stopStatusStr = "URGENT";
+                immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. "+waveBigS,lastChatTime,barIndex,stopStatusStr);
+            }
+            // Patterns whose PreOne is an OR of multiple states (no single PreOne guard).
+            Else If(arrWaveStrBigPreOne[0] == "U高高" || arrWaveStrBigPreOne[0] == "US低高")
+            {
+                Bool conditionSmall_tt1 = arrWaveStrSmallPreOne[0] == "U高高" || arrWaveStrSmallPreOne[0] == "U平高"
+                    || arrWaveStrSmallPreOne[0] == "UV高";
+                If((conditionSmall_tt1) && arrWaveStrSmall[0] == "D高高")
+                {
+                    stopStatusStr = "URGENT";
+                }
+                 immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. "+waveBigS,lastChatTime,barIndex,stopStatusStr);
+            }
+            Else If(arrWaveStrBigPreOne[0] == "U平高" || arrWaveStrBigPreOne[0] == "U高平")
+            {
+                 immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. "+waveBigS,lastChatTime,barIndex,"URGENT");
+            }
+            Else If(arrWaveStrBigPreOne[0] == "DS低高" || arrWaveStrBigPreOne[0] == "U平平")
+            {
+                If(arrWaveStrSmallPreThree[0] == "U高S低" && arrWaveStrSmallPreTwo[0] == "D高高"
+                    && arrWaveStrSmallPreOne[0] == "U高平" && arrWaveStrSmall[0] == "D高高" )
+                {
+                    immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. " + arrWaveStrBigPreTwo[0] + "->" + arrWaveStrBigPreOne[0]
+                    + "->" + arrWaveStrBig[0], lastChatTime,barIndex,stopStatusStr);
+                    //Return True;
+                }
+            }
+            // PreOne: U^高
+            Else If(arrWaveStrBigPreOne[0] == "U^高")
+            {
+                If(arrWaveStrBigPreThree[0] == "UV高" && arrWaveStrBigPreTwo[0] == "D平高")
+                {
+                    immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. " + waveBigS, lastChatTime, barIndex, "NORMAL");
+                }
+            }
+            // PreOne: UV平
+            Else If(arrWaveStrBigPreOne[0] == "UV平")
+            {
+                If(arrWaveStrBigPreTwo[0] == "UV低")
+                {
+                     immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. "+waveBigS,lastChatTime,barIndex,stopStatusStr);
+                }
+            }
+            // PreOne: UV低
+            Else If(arrWaveStrBigPreOne[0] == "UV低")
+            {
+                If(arrWaveStrBigPreThree[0] == "DV低" && arrWaveStrBigPreTwo[0] == "U低平")
+                {
+                    stopStatusStr = "URGENT";
+                     immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. "+ waveBigS,lastChatTime,barIndex,stopStatusStr);
+                }
+            }
+            // PreOne: UV高
+            Else If(arrWaveStrBigPreOne[0] == "UV高")
+            {
+                /*Bool conSmall_dgg2 = arrWaveStrSmallPreTwo[0] == "D平高"
+                    && arrWaveStrSmallPreOne[0] == "U高平" && arrWaveStrSmall[0] == "D平高";
+                If(saleRevenueCreditStatusBig < 0 || conSmall_dgg2)
+                {*/
+                    stopStatusStr = "URGENT";
+                //}
+               /* Bool conSmall_dgg1 = arrWaveStrSmallPreTwo[0] == "U^高"
+                    && arrWaveStrSmallPreOne[0] == "U高平" && arrWaveStrSmall[0] == "D高高";
+                If(conSmall_dgg1 || conSmall_dgg2)
+                {*/
+                    immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. " + waveBigS, lastChatTime,barIndex,stopStatusStr);
+                //}
+            }
+        }
+
+        // ---- current big-wave: D平高 ----
+        If( arrWaveStrBig[0] == "D平高")
+        {
+            // arrWaveStrBigPreOne[0] == "U高高" Bad effective
+            Bool conditionSmall_tt1 = arrWaveStrSmallPreOne[0] == "U高平" || arrWaveStrSmallPreOne[0] == "D高高"
+                    || arrWaveStrSmallPreOne[0] == "D高平";
+            Bool conditionSmall_dgg1 = arrWaveStrSmallPreOne[0] == "U高平" || arrWaveStrSmallPreOne[0] == "U高高"
+                    || arrWaveStrSmallPreOne[0] == "D高高";
+            If(priceFastCredit < 0 || arrWaveStrBigPreOne[0] == "US低高" || conditionSmall_tt1 || conditionSmall_dgg1)
+            {
+                stopStatusStr = "URGENT";
+            }
+            If(arrWaveStrBigPreOne[0] == "U高平" || arrWaveStrBigPreOne[0] == "U平高" || arrWaveStrBigPreOne[0] == "US低高" 
+                || conditionSmall_tt1 || conditionSmall_dgg1)
+            {
+                immediatelyRisingStopPrice("xxxxxxxxxxx  inversion to down. "+waveBigS,lastChatTime,barIndex,stopStatusStr);   
+            }
+        }
+        If( arrWaveStrBig[0] == "D高平")
+        {
+            If(priceFastCredit < 0)
+            {
+                stopStatusStr = "URGENT";
+            }
+            immediatelyRisingStopPrice("xxxxxxxxxxx  inversion to down. "+waveBigS,lastChatTime,barIndex,stopStatusStr);
+        }
+        // ---- current big-wave: DS低高 ----
+        If(arrWaveStrBig[0] == "DS低高")
+        {
+            //U低低-D高平-U低低-DS低高
+            If(arrWaveStrBigPreOne[0] == "U低低")
+            {
+                immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. " + waveBigS, lastChatTime,barIndex,"NORMAL");
+            }
+        }
+
+        // ---- current big-wave: DV平 ----
+        If(arrWaveStrBig[0] == "DV平")
+        {
+            If(arrWaveStrBigPreOne[0] == "US高低")
+            {
+                If(arrWaveStrBigPreThree[0] == "D平低" && arrWaveStrBigPreTwo[0] == "U平低")
+                {
+                     immediatelyRisingStopPrice("xxxxxxxxxxx  inversion to down. "+waveBigS,lastChatTime,barIndex,stopStatusStr);
+                }
+            }
+        }
+
+        // ---- current big-wave: DV高 ----
+        // NOTE: the DV高-UV高-DV高 block previously appeared 3 times; collapsed to one (idempotent call).
+        If(arrWaveStrBig[0] == "DV高")
+        {
+            // PreOne: UV高
+            If(arrWaveStrBigPreOne[0] == "UV高")
+            {
+                If(arrWaveStrBigPreTwo[0] == "DV高")
+                {
+                     immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. "+ waveBigS,lastChatTime,barIndex,stopStatusStr);
+                }
+            }
+            // PreOne: U低S高
+            Else If(arrWaveStrBigPreOne[0] == "U低S高")
+            {
+                If(arrWaveStrBigPreThree[0] == "DV平" && arrWaveStrBigPreTwo[0] == "U低平")
+                {
+                     If(arrWaveStrSmallPreOne[0] == "U高平" && arrWaveStrSmall[0] == "D高高" )
+                    {
+                        immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. " + waveBigS, lastChatTime,barIndex,stopStatusStr);
+                    }
+                }Else
+                {
+                    stopStatusStr = "URGENT";
+                    immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. " + waveBigS, lastChatTime,barIndex,stopStatusStr);
+                }
+            }
+            // PreOne: US低高
+            Else If(arrWaveStrBigPreOne[0] == "US低高")
+            {
+                If(arrWaveStrBigPreThree[0] == "US低S低" && arrWaveStrBigPreTwo[0] == "U平平")
+                {
+                     If(arrWaveStrSmallPreOne[0] == "U高平" && arrWaveStrSmall[0] == "D高高" )
+                    {
+                        immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. " + waveBigS, lastChatTime,barIndex,stopStatusStr);
+                    }
+                }
+            }
+            // PreOne: U高高
+            Else If(arrWaveStrBigPreOne[0] == "U高高")
+            {
+                Bool conditionSmall_dgp_1 = arrWaveStrBigPreThree[0] == "U^高" && arrWaveStrBigPreTwo[0] == "U高平";
+                Bool conditionSmall_dvg_1 = arrWaveStrSmallPreOne[0] == "U平高" && arrWaveStrSmall[0] == "D平高";
+                If(conditionSmall_dvg_1)
+                {
+                    stopStatusStr = "URGENT";
+                }
+                If(conditionSmall_dgp_1 || conditionSmall_dvg_1)
+                {
+                     immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. "+waveBigS+" "+stopStatusStr,lastChatTime,barIndex,stopStatusStr);
+                }
+            }
+            // PreOne: U高S低
+            Else If(arrWaveStrBigPreOne[0] == "U高S低")
+            {
+                If(arrWaveStrBigPreThree[0] == "DV平" && arrWaveStrBigPreTwo[0] == "U^平")
+                {
+                     immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. "+ waveBigS,lastChatTime,barIndex,stopStatusStr);
+                }
+            }
+            // PreOne: UV平
+            Else If(arrWaveStrBigPreOne[0] == "UV平")
+            {
+                If(arrWaveStrBigPreTwo[0] == "U低S高")
+                {
+                    stopStatusStr = "URGENT";
+                     immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. "+ waveBigS,lastChatTime,barIndex,stopStatusStr);
+                }
+            }
+            Else If(arrWaveStrBigPreOne[0] == "UV低")
+            {
+                    stopStatusStr = "URGENT";
+                     immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. "+ waveBigS,lastChatTime,barIndex,stopStatusStr);
+            }
+            // PreOne: U平高
+            Else If(arrWaveStrBigPreOne[0] == "U平高")
+            {
+                /*If(saleRevenueCreditStatus_fast < 0)
+                {// Bad Effective
+                    stopStatusStr = "URGENT";
+                }*/
+                If(Low < priceSlowMa)
+                {
+                    stopStatusStr = "URGENT";
+                }
+                immediatelyRisingStopPrice("xxxxxxxxxxx inversion to down. "+ waveBigS,lastChatTime,barIndex,stopStatusStr);
+            }
+        }
+
+        // ---- current big-wave: U高高 ----
+        If(arrWaveStrBig[0] == "U高高")
+        {// This status isnot reasonable to prohibit
+            // It`s unreasonable to prohibit this state
+        }
+
+        // ---- current big-wave: U高平 ----
+        If(arrWaveStrBig[0] == "U高平")
+        {
+        }
+
+        // ---- current big-wave: U高S低 ----
+        If(arrWaveStrBig[0] == "U高S低")
+        {
+        }
+
+        // ---- current big-wave: U平平 ----
+        If(arrWaveStrBig[0] == "U平平")
+        {
+        }
+
+        // ---- current big-wave: U平高 ----
+        If(arrWaveStrBig[0] == "U平高")
+        {
+        }
+
+        // ---- current big-wave: UV平 ----
+        If(arrWaveStrBig[0] == "UV平")
+        {
+        }
+
+        // =====================================================================
+        // "Maybe not work" — only prohibit opening a new position (isProhibatPosition).
+        // Grouped by current big-wave state, then preceding state.
+        // =====================================================================
+        Integer waveLifeSmallSingleDigit =  waveLifeSmall % 10;
+        If((waveLifeSmallSingleDigit > 2 && saleSafeRevenueCoefficient > 0.15) && (arrWaveStrSmall[0] == "U平平" || arrWaveStrBig[0] == "U平平"))
+        {
+            isProhibatPosition = True;
+        }
+        /*If((Abs(waveLifeSmall % 10) < 3 || Abs(waveLifeBig % 10) < 3) && priceFastCredit < 0.5)
+        {
+            Commentary("xxxxxxxxxxxxxxxxxxx waveLifeSmall/waveLifeBig < 3");
+            isProhibatPosition = True;
+        }*/
+        If(waveLifeSmall == 43 || waveLifeBig == 43)
+        {
+            Commentary("xxxxxxxxxxxxxxxxxxx waveLifeSmall/waveLifeBig = 43");
+            isProhibatPosition = True;
+        }
+        If((Abs(waveLifeBig%10) < 3) && (waveLifeSmall == 24 || waveLifeSmall == 34)    
+            && arrWaveStrSmall[0] == "U平平")// initical small-horizontal
+        {
+            Commentary("xxxxxxxxxxxxxxxxxxx waveLifeSmall: "+Text(waveLifeSmall)+" / waveLifeBig: "+Text(waveLifeBig));
+            isProhibatPosition = True;
+        }
+        If(waveLifeSmall == -12 && (arrWaveStrSmall[0] == "UV平" || arrWaveStrSmall[0] == "DV平"))
+        {
+            Commentary("xxxxxxx ww-01 waveLifeSmall: "+Text(waveLifeSmall)+" "+arrWaveStrSmall[0]);
+            isProhibatPosition = True;
+        }
+        /*If(Abs(waveLifeBig) == 11 && saleRevenueCreditStatusBig < 0)
+        {
+            Commentary("xxxxxxx ww-02 waveLifeBig: "+Text(waveLifeBig)+" psBig: "+Text(saleRevenueGrowthTTM_bigMA));
+            isProhibatPosition = True;
+        }*/
+        
+        Commentary("--------- wave w-02 add "+Text(saleRevenueCreditStatusBig+priceBigCredit));
+        /*If( saleRevenueCreditStatusBig + priceBigCredit  < 0.6 && saleRevenueGrowthTTM_fastMA < saleRevenueGrowthTTM_bigMA)
+        {
+            Commentary("xxxxxxx ww-02 waveLifeBig: "+Text(waveLifeBig)+" psBig: "+Text(saleRevenueGrowthTTM_bigMA));
+            isProhibatPosition = True;
+        }*/
+        // =====================================================================
+        //  || arrWaveStrBig[0] == "U^高"
+        If(arrWaveStrBig[0] == "U高平" || arrWaveStrBig[0] == "U平平"
+            || arrWaveStrBig[0] == "U低平"|| arrWaveStrBig[0] == "UV平")
+        {
+            If(priceVelocityBig > 1.35 && priceFastCredit < 0)
+            {
+                isProhibatPosition = True;
+            }
+        }
+        If(arrWaveStrBig[0] == "D高高")
+        {
+            If(arrWaveStrBigPreOne[0] == "U平高")
+            {
+                Bool conditon1 = arrWaveStrSmall[0] == "U高平";
+                If(conditon1)
+                {
+                    isProhibatPosition = True;
+                }
+            }
+        }
+        If(arrWaveStrBig[0] == "D平平")
+        {
+            If(arrWaveStrBigPreOne[0] == "U平平")
+            {
+                isProhibatPosition = True;
+            }
+        }
+        If(arrWaveStrBig[0] == "D平高")
+        {
+            If(arrWaveStrBigPreOne[0] == "U平高")
+            {
+                Bool conditon1 = arrWaveStrSmallPreOne[0] == "U^高" && arrWaveStrSmall[0] == "U高平";
+                If(conditon1)
+                {
+                    isProhibatPosition = True;
+                }
+            }
+        }
+        If(arrWaveStrBig[0] == "U低低")
+        {
+            If(arrWaveStrBigPreOne[0] == "D高平")
+            {
+                If(arrWaveStrBigPreThree[0] == "U低低" &&arrWaveStrBigPreTwo[0] == "D高高")
+                {
+                    Bool conditon1 = arrWaveStrSmallPreThree[0] == "D平低" && arrWaveStrSmallPreTwo[0] == "U平低"
+                        && arrWaveStrSmallPreOne[0] == "US高低" && arrWaveStrSmall[0] == "U平平";
+
+                    If(conditon1)
+                    {
+                        Commentary("xxxxxxxxxx all-waves.");
+                        isProhibatPosition = True;
+                    }
+                }
+            }
+        }
+        If(arrWaveStrBig[0] == "DS高S高")
+        {
+            If(arrWaveStrBigPreOne[0] == "D平高")
+            {
+                If(arrWaveStrBigPreThree[0] == "U低低" &&arrWaveStrBigPreTwo[0] == "U低平")
+                {
+                    Bool conditon1 = arrWaveStrSmallPreThree[0] == "DV平" && arrWaveStrSmallPreTwo[0] == "U平低"
+                        && arrWaveStrSmallPreOne[0] == "US高低" && arrWaveStrSmall[0] == "U平平";
+
+                    If(conditon1)
+                    {
+                        Commentary("xxxxxxxxxx all-waves.");
+                        isProhibatPosition = True;
+                    }
+                }
+            }
+        }
+        If(arrWaveStrBig[0] == "U高S低")
+        {
+            If(arrWaveStrBigPreOne[0] == "U^平")
+            {
+                If(arrWaveStrBigPreThree[0] == "UV低" && arrWaveStrBigPreTwo[0] == "DV高")
+                {
+                    isProhibatPosition = True;
+                }
+            }
+        }
+
+        If(isWaveStateChange)
+        {
+            isWaveStateChange = False;
+            Print(Text(lastChatTime)+ " waveBig: "+waveBigS+" "+Text(waveLifeBig));
+            Print("waveSmall: "+waveSmallS+" "+Text(waveLifeSmall));
+        }
+        //=========================================
+        Return isProhibatPosition;
+    }
+
+
+Events
+    OnInit()
+    {
+        //=============很多品种,在前期数据跳空很大,或者上下单针穿刺太严重,不合适做
+        /*mapStartOrderDate["au888.SHFE-黄金连续"] = 20190528;
+        mapStartOrderDate["b9888.DCE-豆二连续"] = 20180228;
+        mapStartOrderDate["fu888.SHFE-燃油连续"] = 20180928;*/
+        mapStartOrderDate["600763.SSE"] = 20040610;
+        mapStartOrderDate["600988.SSE"] = 20090801;
+        //Print("map== "+TextMap(mapStartOrderDate));
+        If(MapContain(mapStartOrderDate,Symbol) && !ArrayFind(arrayStartOrderDate,Symbol))
+        {
+            Numeric valueProhibitTime = mapStartOrderDate[Symbol];
+            Print("-----valueProhibitTime-"+Text(valueProhibitTime));
+
+            ArrayPushBack(arrayStartOrderDate,Symbol);
+            //UnsubscribeBar();
+            //SubscribeBar(Symbol,"1d",valueProhibitTime,SystemTimestamp-1,Enum_Data_RolloverForWard);
+            //设置行情范围
+            Bool ret = SetDataRange("1d",valueProhibitTime,SystemTimestamp-1,Enum_Data_RolloverForWard);
+            Return;
+        }Else
+        {
+            //SetDataRange("1d",20100101,SystemTimestamp-1,Enum_Data_RolloverForWard);
+        }
+    }
+    OnReady()
+    {
+        Range[0:DataSourceSize() - 1]
+        {
+            SetBackBarMaxCount(1 + maxBackBar);
+        }
+        Print("     "+Symbol+" "+SymbolName);
+    }
+
+    OnBar(ArrayRef<Integer> indexs)
+    {
+        Range[0:DataSourceSize()-1]
+        {
+            If(MarketPosition == 0)
+            {
+                isProhibatOpen = False;
+            }
+            Else{
+                //Return;
+            }
+            If(CurrentBar < 500)
+            {
+                Commentary("xxxxxx CurrentBar: " + Text(CurrentBar));
+                Return;
+            }
+            Bar lastChatBar;
+            GetBar(lastChatBar, 0);
+            //============================ 时间限制 begin
+            If(!QscTestController(lastChatBar, appointedKLineLastDay, defxxDaysAgoCanTrade, isTest))
+            {
+                //Print("xxxxxx Time-Cannot to Tread: time is error " + Text(lastChatBar.dateTime) +" "+ Qsc_bool_print(isTest));
+                Return;
+            }
+            msgboxMore(0, FormulaName + " ," + Text(Date), True);
+            ArrayClear(ultimateCalculateArray);
+            //================================================  Common Codes Begin ==============================
+            Integer namesSize = Qsc_premise_extract_parameter(ultimateCalculateArray);
+            Integer iii ;
+            //----------------------  KLine Qsc_ma
+            Numeric priceFastMa = InvalidNumeric;
+            Numeric priceSlowMa = InvalidNumeric;
+            Numeric priceBigMa = InvalidNumeric;
+            Numeric priceBigCredit = InvalidInteger;
+            Numeric priceFastCredit = InvalidInteger;
+            Bool priceUpRecent = False;
+            Numeric priceSafeCoefficient = InvalidNumeric;
+            Numeric priceExtremeHigh = InvalidNumeric;
+            Numeric priceExtremeLow = InvalidNumeric;
+            Numeric priceVelocityShort = InvalidNumeric;
+            Numeric priceVelocityMid = InvalidNumeric;
+            Numeric priceVelocityBig = InvalidNumeric;
+            Numeric priceVelocityYear = 0;
+            Numeric priceVelocityBigIndex = 0;              // An indexs that records large fluctuations
+            //---------------------  Qsc_INCOME_REVENUE Price/Sales
+            Numeric saleRevenueGrowthTTM = InvalidNumeric;                // mainBusinessRevenueGrowth ratio TTM
+            Numeric saleRevenueGrowthTTM_fastMA = InvalidNumeric;         // 是否死叉（快速均线下穿慢速均线）
+            Numeric saleRevenueGrowthTTM_slowMA = InvalidNumeric;         // 是否金叉（快速均线上穿慢速均线）
+            Numeric saleRevenueGrowthTTM_bigMA = InvalidNumeric;          // 是否金叉（快速均线上穿慢速均线）
+            Numeric saleSafeRevenueCoefficient = InvalidNumeric;          // 是否金叉（快速均线上穿慢速均线）
+            Numeric saleRevenueCreditStatusBig = InvalidInteger;
+            Numeric saleRevenueCreditStatus_fast = InvalidInteger;
+            Bool    saleRevenueGrowthTTM_fastMA_isUp = False;
+            Bool    saleRevenueGrowthCrossUnderPs_reasonable;       // true 在安全区域
+            //---------------------  Qsc_finanalyisis_profitablity
+            Numeric debtQuarterlyTime = 0;                  // 季度数字 3 6 9 12
+            Numeric debtCurrentGrossProfitMargin = 0;           // GrossProfitMargin
+            Numeric debtRateCurrent = 0;                         // 当报告季度净资产收益率
+            Numeric debtOldGrossProfitMargin = 0;           // GrossProfitMargin
+            Numeric debtOldRoeTTM = 0;           // GrossProfitMargin
+            Numeric debtAdjustDebtGross = 0;           // GrossProfitMargin
+            //---------------------  Qsc_FINANALYSIS_GROWTH= 34.1264*False
+            Numeric mainBusinessRevenueGrowthRatio ;
+            Numeric mainBusinessRevenueGrowDiff ;
+            Numeric mainBusinessRevenueGrowthRatio_average_fast = InvalidNumeric;                // true 在平均线上
+            Numeric mainBusinessRevenueGrowthRatio_average_slow = InvalidNumeric;
+            Numeric mainBusinessRevenueGrowthRatio_average_big = InvalidNumeric;
+            Numeric mainBusinessRevenueGrowthRatio_recentRate = InvalidNumeric;
+            Numeric mainBusinessRevenueGrowth_creditFast = InvalidNumeric;
+            Bool mainBusinessRevenueGrowthRatio_three_IsPeek = False;
+            // ========================================== Qsc_TurnoverRate
+            Numeric trCurrentValue = 0;
+            Numeric trFastMa = 0;
+            Numeric trSlowMa = 0;
+            Numeric trFastThreeTrend = 0;
+            Numeric trExtremeRate = 0;
+            Numeric trExtremeCurrentBar = 0;
+            // ----------------------------- QSc_wave_single1
+            Bool waveLastMainTrend = False;
+            Bool waveIsLastMainUpd = False;
+            Bool waveIsLastMainByLongBar = False;
+            Numeric waveApoint = InvalidNumeric;
+            Numeric waveBpoint = InvalidNumeric;
+            Numeric waveCpoint = InvalidNumeric;
+            Numeric waveHlHasChange = InvalidNumeric;
+            Numeric waveLife = InvalidNumeric;
+            // ----------------------------- QSc_wave_single_copy
+            Bool wave2LastMainTrend = False;
+            Bool wave2IsLastMainUpd = False;
+            Bool wave2IsLastMainByLongBar = False;
+            Numeric wave2Apoint = InvalidNumeric;
+            Numeric wave2Bpoint = InvalidNumeric;
+            Numeric wave2Cpoint = InvalidNumeric;
+            Numeric wave2HlHasChange = InvalidNumeric;
+            Numeric wave2Life = InvalidNumeric;
+            // ========================================== TB_FINANALYSIS_TTM
+            Numeric npmCurrent = 0;
+            Numeric npmFastMA = 0;
+            Numeric npmSlowMA = 0;
+            Numeric npmFastCriditTrend = 0;
+            Numeric npmSlowCriditTrend = 0;
+            Numeric npmContinuouslyUpValue = 0;
+            Numeric continuouslyUpTimes = 0;
+            Numeric npmDiffByPrevious = 0;
+            Numeric npmAmplitude = 0;
+            // ========================================== Qsc_Fvalue
+            /*Numeric peCurrent = 0;
+            Numeric peFast = 0;
+            Numeric peSlow = 0;
+            Numeric peBig = 0;
+            Numeric peCreditFast = 0;
+            Numeric peCreditBig = 0;*/
+            // ========================================== TB_FINANALYSIS0_ROE_TTM
+            Numeric roeCurrent = 0;
+            Numeric roeFast = 0;
+            Numeric roeSlow = 0;
+            Numeric roeBig = 0;
+            Numeric roeCreditFast = 0;
+            Numeric roeCreditSlow = 0;
+            Numeric roeCreditBig = 0;
+
+            //----------------------------------------------------------
+            Numeric priceToBookRatio;
+            Numeric yearTTmPE;
+            For iii = 0 to namesSize - 1
+            {
+                ArrayClear(otherStrtegyParamArray);
+                String otherStrategyValue  = ultimateCalculateArray[iii];
+                StringSplit(otherStrategyValue, "*", otherStrtegyParamArray);
+                /*If(GetArraySize(otherStrtegyParamArray)>2)
+                {
+                    //msgbox(otherStrategyValue);
+                    Print(TextArray(otherStrtegyParamArray) +" "+Text(GetArraySize(otherStrtegyParamArray)));
+                }*/
+                String myFormulaName = otherStrtegyParamArray[0];
+                Integer index = 0;
+                If(myFormulaName == "TB_FINANALYSIS0_ROE_TTM")
+                {
+                    index = 1;
+                    roeCurrent = Value(otherStrtegyParamArray[index]);
+                    roeFast = Value(otherStrtegyParamArray[index + 1]);
+                    roeSlow = Value(otherStrtegyParamArray[index + 2]);
+                    roeBig = Value(otherStrtegyParamArray[index + 3]);
+
+                    roeCreditFast = Value(otherStrtegyParamArray[index + 4]);
+                    roeCreditSlow = Value(otherStrtegyParamArray[index + 5]);
+                    roeCreditBig = Value(otherStrtegyParamArray[index + 6]);
+                    //Print(TextArray(otherStrtegyParamArray));
+                }
+                Else If(myFormulaName == "Qsc_TurnoverRate")
+                {
+                    index = 1;
+                    trCurrentValue = Value(otherStrtegyParamArray[index]);
+                    trFastMa = Value(otherStrtegyParamArray[index + 1]);
+                    trSlowMa = Value(otherStrtegyParamArray[index + 2]);
+                    trFastThreeTrend = Value(otherStrtegyParamArray[index + 3]);
+                    trExtremeRate = Value(otherStrtegyParamArray[index + 4]);
+                    trExtremeCurrentBar = Value(otherStrtegyParamArray[index + 5]);
+                    //Print(TextArray(otherStrtegyParamArray));
+                }
+                Else If(myFormulaName == "Qsc_wave_single")
+                {
+                    index = 1;
+                    waveLastMainTrend = otherStrtegyParamArray[index + 1] == "True";
+                    waveIsLastMainUpd = otherStrtegyParamArray[index + 2] == "True";
+                    waveIsLastMainByLongBar = otherStrtegyParamArray[index + 3] == "True";
+                    waveApoint = Value(otherStrtegyParamArray[index + 4]);
+                    waveBpoint = Value(otherStrtegyParamArray[index + 5]);
+                    waveCpoint = Value(otherStrtegyParamArray[index + 6]);
+                    waveHlHasChange = Value(otherStrtegyParamArray[index + 7]);
+                    waveLife = Value(otherStrtegyParamArray[index + 8]);
+                    String waveNew = otherStrtegyParamArray[index + 9];
+                    If(waveCurrentStatus != waveNew || waveCurrentStatus == InvalidString)
+                    {
+                        waveCurrentStatusPreThree = waveCurrentStatusPreTwo;
+                        waveCurrentStatusPreTwo = waveCurrentStatusPreOne;
+                        waveCurrentStatusPreOne = waveCurrentStatus;
+                        waveCurrentStatus = waveNew;
+                        isWaveStateChange = True;
+                        //Print("Are you See me?");
+                    }
+                    //[Qsc_wave_single,21,  True,True,False,0,0.317073,0.083492,0,12,U平低-D平低,85.6]
+                    //Print(TextArray(otherStrtegyParamArray)+" waveNew: "+waveNew+" waveCurrentStatusCache "+waveCurrentStatusCache
+                    //   +" new: "+waveCurrentStatus);
+                }
+                Else If(myFormulaName == "Qsc_wave_single_two")
+                {
+                    index = 1;
+                    wave2LastMainTrend = otherStrtegyParamArray[index + 1] == "True";
+                    wave2IsLastMainUpd = otherStrtegyParamArray[index + 2] == "True";
+                    wave2IsLastMainByLongBar = otherStrtegyParamArray[index + 3] == "True";
+                    wave2Apoint = Value(otherStrtegyParamArray[index + 4]);
+                    wave2Bpoint = Value(otherStrtegyParamArray[index + 5]);
+                    wave2Cpoint = Value(otherStrtegyParamArray[index + 6]);
+                    wave2HlHasChange = Value(otherStrtegyParamArray[index + 7]);
+                    wave2Life = Value(otherStrtegyParamArray[index + 8]);
+                    String waveNew = otherStrtegyParamArray[index + 9];
+
+                    If(wave2CurrentStatus != waveNew || wave2CurrentStatus == InvalidString)
+                    {
+                        wave2CurrentStatusPreThree = wave2CurrentStatusPreTwo;
+                        wave2CurrentStatusPreTwo = wave2CurrentStatusPreOne;
+                        wave2CurrentStatusPreOne = wave2CurrentStatus;
+                        wave2CurrentStatus = waveNew;
+                        isWaveStateChange = True;
+                    }
+                    //Print(TextArray(otherStrtegyParamArray)+"   "+wave2CurrentStatus);
+                }
+                Else If(myFormulaName == "Qsc_MA")
+                {
+                    index = 1;
+                    priceFastMa = Value(otherStrtegyParamArray[index]);
+                    priceSlowMa = Value(otherStrtegyParamArray[index + 1]);
+                    //Commentary("priceFastMa = "+Text(priceFastMa));
+                    priceExtremeHigh = Value(otherStrtegyParamArray[index + 2]);
+                    priceExtremeLow = Value(otherStrtegyParamArray[index + 3]);
+                    priceBigMa = Value(otherStrtegyParamArray[index + 4]);
+                    priceBigCredit = Value(otherStrtegyParamArray[index + 5]);
+                    priceSafeCoefficient = Value(otherStrtegyParamArray[index + 6]);
+                    priceFastCredit = Value(otherStrtegyParamArray[index + 7]);
+                    priceUpRecent = otherStrtegyParamArray[index + 8] == "True";
+                    priceVelocityShort =  Value(otherStrtegyParamArray[index + 9]);
+                    priceVelocityMid =  Value(otherStrtegyParamArray[index + 10]);
+                    priceVelocityBig =  Value(otherStrtegyParamArray[index + 11]);
+                    priceVelocityYear =  Value(otherStrtegyParamArray[index + 12]);
+                    /*Commentary("--- priceBigMa: "+Text(priceBigMa)+" priceBigCredit: "+Text(priceBigCredit)
+                        +" priceSafeCoefficient: "+Text(priceSafeCoefficient));*/
+                }
+                Else If(myFormulaName == "Qsc_INCOME_REVENUE")
+                {
+                    index = 1;
+                    saleRevenueGrowthTTM = Value(otherStrtegyParamArray[index + 0]);
+                    saleRevenueGrowthTTM_fastMA = Value(otherStrtegyParamArray[index + 1]);
+                    saleRevenueGrowthTTM_slowMA = Value(otherStrtegyParamArray[index + 2]);
+                    saleRevenueGrowthTTM_fastMA_isUp = otherStrtegyParamArray[index + 3] == "True";
+                    saleRevenueGrowthCrossUnderPs_reasonable = otherStrtegyParamArray[index + 4] == "True";
+                    saleSafeRevenueCoefficient = Value(otherStrtegyParamArray[index + 5]);
+                    saleRevenueGrowthTTM_bigMA = Value(otherStrtegyParamArray[index + 6]);
+                    saleRevenueCreditStatusBig = Value(otherStrtegyParamArray[index + 7]);
+                    saleRevenueCreditStatus_fast = Value(otherStrtegyParamArray[index + 8]);
+                    /*Commentary("saleRevenueGrowthTTM = "+Text(saleRevenueGrowthTTM)
+                        +" saleRevenueCreditStatusBig: "+Text(saleRevenueCreditStatusBig)
+                        +" saleRevenueCreditStatus_fast: "+Text(saleRevenueCreditStatus_fast)
+                    );*/
+                    //Print(TextArray(otherStrtegyParamArray));
+                }
+                Else If(myFormulaName == "Qsc_finanalyisis_profitablity_two")
+                {
+                    debtQuarterlyTime = Value(otherStrtegyParamArray[index + 2]);
+                    debtRateCurrent = Value(otherStrtegyParamArray[index + 3]);
+                    debtCurrentGrossProfitMargin = Value(otherStrtegyParamArray[index + 4]);
+                    debtOldRoeTTM = Value(otherStrtegyParamArray[index + 5]);
+                    debtOldGrossProfitMargin = Value(otherStrtegyParamArray[index + 6]);
+                    debtAdjustDebtGross = Value(otherStrtegyParamArray[index + 7]);
+                    /*Commentary("#### debtAdjustDebtGross: "+Text(debtAdjustDebtGross)+" "+Text(index)
+                        +" "+TextArray(otherStrtegyParamArray) +" &&& "+Text(lastChatBar.dateTime));*/
+                }
+                Else If(myFormulaName == "Qsc_FINANALYSIS_GROWTH")
+                {
+                    mainBusinessRevenueGrowthRatio = Value(otherStrtegyParamArray[index + 2]);
+                    mainBusinessRevenueGrowDiff = Value(otherStrtegyParamArray[index + 3]);
+                    mainBusinessRevenueGrowthRatio_average_fast = Value(otherStrtegyParamArray[index + 4]);
+                    mainBusinessRevenueGrowthRatio_average_slow = Value(otherStrtegyParamArray[index + 5]);
+                    mainBusinessRevenueGrowthRatio_three_IsPeek = otherStrtegyParamArray[index + 6] == "True";
+                    mainBusinessRevenueGrowthRatio_average_big = Value(otherStrtegyParamArray[index + 7]);
+                    mainBusinessRevenueGrowthRatio_recentRate = Value(otherStrtegyParamArray[index + 8]);
+                    mainBusinessRevenueGrowth_creditFast = Value(otherStrtegyParamArray[index + 9]);
+                    //Print(TextArray(otherStrtegyParamArray));
+                }
+                Else If(myFormulaName == "Qsc_Fvalue")
+                {
+                    /*peCurrent = Value(otherStrtegyParamArray[index + 1]);
+                    peFast = Value(otherStrtegyParamArray[index + 2]);
+                    peSlow = Value(otherStrtegyParamArray[index + 3]);
+                    peBig = Value(otherStrtegyParamArray[index + 4]);
+                    peCreditFast = Value(otherStrtegyParamArray[index + 5]);
+                    peCreditBig = Value(otherStrtegyParamArray[index + 6]);*/
+                    //Print("Qsc_Fvalue "+TextArray(otherStrtegyParamArray));
+                }
+                Else If(myFormulaName == "TB_FINANALYSIS_TTM")
+                {
+                    index = 1;
+                    npmCurrent = Value(otherStrtegyParamArray[index]);
+                    npmFastMA = Value(otherStrtegyParamArray[index + 1]);
+                    npmSlowMA = Value(otherStrtegyParamArray[index + 2]);
+
+                    npmFastCriditTrend = Value(otherStrtegyParamArray[index + 3]);
+                    npmSlowCriditTrend = Value(otherStrtegyParamArray[index + 4]);
+                    npmContinuouslyUpValue = Value(otherStrtegyParamArray[index + 5]);
+                    continuouslyUpTimes = Value(otherStrtegyParamArray[index + 6]);
+                    
+                    npmDiffByPrevious = Value(otherStrtegyParamArray[index + 7]);
+                    npmAmplitude = Value(otherStrtegyParamArray[index + 8]);
+                    //Print("&&&&&&&&&&& npmSafeCoefficient: "+Text(npmSafeCoefficient));
+                }
+            }
+            //==============================================================================
+            If(priceVelocityBig > 4 || priceVelocityMid > 2)
+            {
+                priceVelocityBigIndex = CurrentBar;
+            }
+            //==============================================================================
+            Numeric mainBusinessMidV = (mainBusinessRevenueGrowthRatio_recentRate + mainBusinessRevenueGrowthRatio_average_big) / 2
+                                       + ((mainBusinessRevenueGrowthRatio_recentRate - mainBusinessRevenueGrowthRatio_average_big) / 2);
+
+            //=================================
+            Numeric barRiseK = priceExtremeHigh / priceExtremeLow;
+            Numeric psCoefficient = saleRevenueGrowthTTM / saleRevenueGrowthTTM_bigMA;
+
+            //Numeric psCurrentDividedMa1 = saleRevenueGrowthTTM / saleRevenueGrowthTTM_fastMA;
+            //==============================================
+            Numeric npmStandart = npmCurrent + (npmCurrent - npmSlowMA) / 2;
+            Numeric roeStandart = roeCurrent  + ( roeCurrent - roeFast) / 2;
+            Numeric priceAndSaleCoefficient = priceSafeCoefficient / (
+                                                  saleSafeRevenueCoefficient * (1 + mainBusinessMidV * (npmStandart / 100) / 100));
+            Numeric npmUpsDownsAmplitude = npmContinuouslyUpValue / npmSlowMA;
+            Numeric mainbUpsDownsAmplitude = mainBusinessRevenueGrowDiff / mainBusinessRevenueGrowthRatio_average_big;
+            Numeric psStandart = npmCurrent / 100 *  debtAdjustDebtGross * (1 + roeCurrent / 100) * (1 + mainbUpsDownsAmplitude / 10)
+                 * (1 + mainBusinessRevenueGrowthRatio / 100)  * (1 + npmUpsDownsAmplitude * 2);
+            Numeric closeDivideSlowMa =  Close / priceSlowMa;
+            Numeric closeDivideBigMa =  Close / priceBigMa;
+            Numeric hightDivideFastMa =  High / priceFastMa;
+            //=======================================================================
+            Bool npmCondition = (npmFastCriditTrend > 1 || npmFastMA < npmCurrent);
+            Bool roeCondition = (roeFast > roeSlow || roeCreditFast > 1);
+            //==============================================
+
+            //==============================================================================
+
+            Commentary("------------Condition  psCoefficient: " + Text(psCoefficient)
+               + " npmCondition: " + Qsc_bool_print(npmCondition)
+               + " roeCondition: " + Qsc_bool_print(roeCondition)
+               + " psStandart: " + Text(psStandart)
+               + " npmStandart: " + Text(npmStandart,2)
+               + " roeStandart: " + Text(roeStandart,2)
+               + " mainBusinessMidV: " + Text(mainBusinessMidV,2)
+               + " closeDivideSlowMa: " + Text(closeDivideSlowMa,2)
+               + " priceAndSaleCoefficient: " + Text(priceAndSaleCoefficient)
+               + " oldMainBusiness: " + Text(mainBusinessRevenueGrowDiff)
+               + " npmUpsDownsAmplitude: " + Text(npmUpsDownsAmplitude)
+            );
+            Numeric npmAmplitudePlusMainB =  npmAmplitude * 150 + mainBusinessRevenueGrowthRatio;
+            //npmAmplitudePlusMainB = npmAmplitudePlusMainB;
+            /*If(npmAmplitudePlusMainB != npmAmplitudePlusMainB)
+            {*/
+            Numeric calculateMultiYearsReachedPsByNpmAmplitudePlusMainB = 
+                    calculateBarRishKByGrowth(saleRevenueGrowthTTM, npmAmplitudePlusMainB);
+                //Print(Text(lastChatBar.dateTime)+"----Calculate npmAmplitudePlusMainB: "+Text(npmAmplitudePlusMainB)
+                   // +" stdPs: "+Text(calculateMultiYearsReachedPsByNpmAmplitudePlusMainB));
+            //}
+            Commentary("---npmAmplitudePlusMainB: "+Text(npmAmplitudePlusMainB)+" npmAmplitude: "+Text(npmAmplitude)
+                +" mainBusinessRevenueGrowthRatio: "+Text(mainBusinessRevenueGrowthRatio)+" stdPs: "+Text(calculateMultiYearsReachedPsByNpmAmplitudePlusMainB));
+            /*Numeric limitMaxPs = debtAdjustDebtGross * (1+npmCurrent/100) * 0.45;
+            If(calculateMultiYearsReachedPsByNpmAmplitudePlusMainB > limitMaxPs)
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxx stdPsMulti: " + Text(calculateMultiYearsReachedPsByNpmAmplitudePlusMainB)
+                    +" psLimitMax: "+Text(limitMaxPs));
+                Return;
+            }*/
+            // SystemTimestamp
+            If(PreTradingDay(20260810,1) == lastChatBar.dateTime)
+            {
+                Print("-----End-----"+Symbol+"-"+SymbolName+" npmAmplitude: "+Text(npmAmplitudePlusMainB,2)
+                    +" stdPs: "+Text(calculateMultiYearsReachedPsByNpmAmplitudePlusMainB));
+            }
+            //================================================================================================
+            Bool isProhibatOpenPre = handleWaveSituation(//peFast, peSlow, peBig, peCreditFast, peCreditBig,
+                                npmContinuouslyUpValue,
+                                   npmSlowMA, roeCondition,
+                                   npmFastCriditTrend, roeCreditFast,mainBusinessRevenueGrowDiff, mainBusinessRevenueGrowthRatio_recentRate,
+                                   mainBusinessRevenueGrowth_creditFast, mainBusinessRevenueGrowthRatio,
+                                   priceSafeCoefficient, priceFastMa, priceSlowMa, priceBigMa, priceFastCredit, priceBigCredit,
+                                   priceVelocityShort,priceVelocityBig,
+                                   saleRevenueCreditStatusBig, saleRevenueCreditStatus_fast,
+                                   saleRevenueGrowthTTM,
+                                   saleRevenueGrowthTTM_fastMA, saleRevenueGrowthTTM_slowMA,
+                                   saleRevenueGrowthTTM_bigMA,saleSafeRevenueCoefficient,
+                                    lastChatBar.dateTime, CurrentBar,
+                                   waveLife,wave2Life);
+            If(npmCurrent < 40 && (priceFastCredit < 0 || priceBigCredit < 0) && saleSafeRevenueCoefficient > 0.15)
+            {
+                Bool npmLowCondition1 = npmUpsDownsAmplitude < -0.02 && priceFastCredit < 0;
+                Bool npmLowCondition2 = npmUpsDownsAmplitude < 0 && npmFastMA < npmSlowMA;
+                If(npmLowCondition1 || npmLowCondition2)
+                {
+                    immediatelyRisingStopPrice(" npm  N01-11.npmContinuouslyUpValue: " + 
+                        Text(npmContinuouslyUpValue), lastChatBar.dateTime, CurrentBar, "URGENT");
+                    //Commentary("xxxxxxxxxxxxxxx npmContinuouslyUpValue: " + Text(npmContinuouslyUpValue));
+                    Return;
+                }
+            }
+            /*If(saleRevenueGrowthTTM < psStandart * 0.75 && priceBigCredit+priceFastCredit>1
+                && closeDivideSlowMa < 1.2 && closeDivideSlowMa >0.8 && saleRevenueGrowthTTM > saleRevenueGrowthTTM_slowMA)
+            {
+                Print(Text(lastChatBar.dateTime)+" ps: "+Text(saleRevenueGrowthTTM,2)
+                +" =price/ps : "+Text(priceAndSaleCoefficient,2)+" --psResult: "+Text(psStandart,1));
+            SetBarVar(FormulaName, "Sel*1*" + Symbol + "*" + SymbolName+"*"+Qsc_bool_print(isProhibatOpen));
+            Commentary("--------------------2-CAN trade-------reasonableSaleRevenueGrowthTTM: ");
+                Return;
+            }*/
+            // no good effective
+            /*If(closeDivideSlowMa > 1.5)
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxx closeDivideSlowMa: " + Text(closeDivideSlowMa));
+                Return;
+            }*/
+            If(hightDivideFastMa > 1.3)
+            {
+                immediatelyRisingStopPrice("xxxxxxxxxxx hightDivideFastMa: " + 
+                        Text(hightDivideFastMa), lastChatBar.dateTime, CurrentBar, "URGENT");
+                Commentary("xxxxxxxxxxxxxxx hightDivideFastMa: " + Text(hightDivideFastMa));
+                Return;
+            }
+            //====================================================================================================
+            
+            /*If(mainBusinessRevenueGrowthRatio < -20)
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxx mainBusinessRevenueGrowthRatio is Negative mainB-A01: " 
+                    + Text(mainBusinessRevenueGrowthRatio));
+                Return;
+            }*/
+            If(npmAmplitudePlusMainB > 45 && priceSafeCoefficient > 0.85
+                && (saleRevenueGrowthTTM_fastMA < saleRevenueGrowthTTM_bigMA || saleRevenueCreditStatus_fast < 0) )
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxx price will down PA-05: " + Text(npmAmplitude)+" priceSafeCoefficient: "+Text(priceSafeCoefficient));
+                Return;
+            }
+            If(npmAmplitudePlusMainB < 45 && npmCurrent < 25 && saleSafeRevenueCoefficient < 0.3)
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxx price shack up PA-06: " + Text(npmAmplitude)
+                    +" saleSafeRevenueCoefficient: "+Text(saleSafeRevenueCoefficient));
+                Return;
+            }
+            // Bad effective
+            /*Numeric priceVelocityByNpm = (priceVelocityYear * 100 -100) / npmAmplitudePlusMainB;
+            If(priceVelocityByNpm > 4 && npmAmplitudePlusMainB < 20 && npmCurrent < 40)
+            {
+                immediatelyRisingStopPrice("xxxxxxxxxxx  npm maybe down: " + Text(npmAmplitude)+" priceSafeCoefficient: "+Text(priceSafeCoefficient)
+                    , lastChatBar.dateTime, CurrentBar, "URGENT");
+                Return;
+            }*/
+            If(npmAmplitude < 0 && priceSafeCoefficient > 0.85 && mainBusinessRevenueGrowthRatio > mainBusinessRevenueGrowthRatio_average_big * 2)
+            {
+                immediatelyRisingStopPrice("xxxxxxxxxxx  npm maybe down: " + Text(npmAmplitude)+" priceSafeCoefficient: "+Text(priceSafeCoefficient)
+                    , lastChatBar.dateTime, CurrentBar, "URGENT");
+                //Commentary("xxxxxxxxxxxxxxxxxxx npm maybe down: " + Text(npmAmplitude)+" priceSafeCoefficient: "+Text(priceSafeCoefficient));
+                Return;
+            }
+            If(npmAmplitude < 0 && closeDivideBigMa > 1.5 && saleRevenueCreditStatusBig < 0.02)
+            {// Shake Up
+                
+                Commentary("xxxxxxxxxxxxxxxxxxx Shake Up: " + Text(npmAmplitude)+" closeDivideBigMa: "+Text(closeDivideBigMa));
+                Return;
+            }
+            // Bad effctive
+            /*If(Close > priceBigMa * (1 + npmCurrent * 0.03))
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxx price too high AB1: closeDivideBigMa: "+Text(closeDivideBigMa));
+                Return;
+            }*/
+            If(npmAmplitude < 0.03 && (priceBigCredit < -0.01 || saleRevenueCreditStatusBig < -0.01))
+            {
+                //
+                Commentary("xxxxxxxxxxxxxxxxxxx npm and priceBig down: " + Text(npmAmplitude)+" priceBigCredit: "+Text(priceBigCredit)
+                    +" saleRevenueCreditStatusBig: "+Text(saleRevenueCreditStatusBig));
+                Return;
+            }
+            If(npmAmplitude < -0.15 && saleRevenueGrowthTTM_fastMA < saleRevenueGrowthTTM_slowMA)
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxx npm and sale fast < slow: " + Text(npmAmplitude));
+                Return;
+            }
+            // Good effective
+            If(npmCurrent < 25)
+            {
+                If(npmDiffByPrevious / npmCurrent < -0.05)
+                {
+                    immediatelyRisingStopPrice("xxxxxxxxxxxxxxxxxxx npm and poor foundation: " + Text(npmAmplitude)
+                        ,lastChatBar.dateTime, CurrentBar, "URGENT");
+                    Return;
+                }
+                // Bad effective
+                /*If(closeDivideBigMa > 1.3 && npmCurrent < 20 && npmAmplitudePlusMainB < 50)
+                {
+                    Commentary("xxxxxxxxxxxxxxxxxxx closeDivideBigMa-A2 " + Text(closeDivideBigMa)
+                        +" npmCurrent<20");
+                    Return;
+                }*/
+            }
+            Numeric maxPs = debtAdjustDebtGross * (1+npmCurrent/100 + npmAmplitude);
+            If(saleRevenueGrowthTTM > maxPs && npmCurrent < 20)
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxx Ps too hight Ps-aa01: " + Text(maxPs));
+                Return;
+            }
+            //========================================================================================================
+            If(isProhibatOpenPre)
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxx special wave-condition: " + wave2CurrentStatus);
+                Return;
+            }
+            
+            If(saleRevenueGrowthTTM_fastMA < 0.1)
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxx saleRevenueGrowthTTM_fastMA too low4: " + Text(saleRevenueGrowthTTM_fastMA));
+                Return;
+            }
+            If(priceVelocityBigIndex > 500 && CurrentBar - priceVelocityBigIndex < 50)
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxx Donot trade after a large fluctuation: ");
+                Return;
+            }
+            
+            If(0 > saleRevenueGrowthTTM_fastMA && saleRevenueCreditStatus_fast < 0.05)
+            {
+                Commentary("xxxxxxxxxxxxxxx AAA-2 ps fast>slow: "+Text(saleRevenueCreditStatus_fast));
+                Return;
+            }
+            If(priceBigCredit < 0.0015 && Abs(wave2Life %10) > 3 && Abs(waveLife%10) > 3)
+            {//saleRevenueCreditStatusBig < 0.01 || 
+                Commentary("xxxxxxxxxxxxxxx AAA-3 ps||price big is down.");
+                Return;
+            }
+            
+            If(saleRevenueGrowthTTM_fastMA < 0 && npmContinuouslyUpValue < 0 && priceFastCredit < 0)
+            {
+                Commentary("xxxxxxxxxxxxxxx AA-1 npmContinuouslyUpValue: "+Text(npmContinuouslyUpValue)
+                     +" npmUpsDownsAmplitude: "+Text(npmUpsDownsAmplitude));
+                Return;
+            }
+            /*If(npmContinuouslyUpValue < 0 && mainBusinessRevenueGrowDiff < 0)
+            {
+                immediatelyRisingStopPrice("xxxxxxxxxxx npm  AA-11.npmContinuouslyUpValue: "+Text(npmContinuouslyUpValue)
+                    ,lastChatBar.dateTime,CurrentBar,"URGENT");
+                Commentary("xxxxxxxxxxxxxxx AA-11 npmContinuouslyUpValue: "+Text(npmContinuouslyUpValue));
+                Return;
+            }*/
+            If(saleSafeRevenueCoefficient < 0.6 && npmUpsDownsAmplitude < -0.013 
+                && (priceFastCredit < 0 || priceBigCredit < 0))
+            {
+                Commentary("xxxxxxxxxxxxxxx AA-2 npmContinuouslyUpValue: "+Text(npmContinuouslyUpValue)
+                    +" npmUpsDownsAmplitude: "+Text(npmUpsDownsAmplitude));
+                Return;
+            }
+            If(saleRevenueCreditStatusBig < 0 && saleRevenueGrowthTTM_fastMA < 0)
+            {
+                If(npmUpsDownsAmplitude > 0.05)
+                {}
+                Else If(npmUpsDownsAmplitude > -0.03 && saleRevenueGrowthTTM / psStandart < 0.3)
+                {}
+                Else
+                {
+                    Commentary("xxxxxxxxxxxxx 3-23-2 maybe is down....");
+                    Return;
+                }
+            }
+            /*If(saleRevenueGrowthTTM > debtAdjustDebtGross * 2)
+            {
+                Commentary("xxxxxxxxx ps is too higt " + Text(debtAdjustDebtGross));
+                Return;
+            }*/
+            
+            //==============================================
+            
+            //==============================================
+            //==============================================
+            Numeric tradableStockValue = Close / rollover * capitalSummary[0][15] * 10000;
+            Numeric bottomCapitalTemp = tbCapitalMin * 100000000;
+            If(tradableStockValue < bottomCapitalTemp && (priceFastMa < 2 || priceBigCredit < 0
+                    || npmFastCriditTrend < 2 || saleRevenueCreditStatusBig < 0))
+            {
+                Commentary("xxxxxxxxx too lower " + Text(tradableStockValue / 100000000) + " 亿");
+                Return;
+            }Else
+            {
+                Commentary("--->MarketPrice:  " + Text(tradableStockValue / 100000000) + " 亿");
+            }
+            If(npmCurrent < 25 && tradableStockValue < 500  * 100000000 && npmAmplitude < 0)
+            {
+                Commentary("xxxxxxxxx npmCurrent/Capital too lower " + Text(tradableStockValue / 100000000) + " 亿");
+                Return;
+            }
+            If(debtCurrentGrossProfitMargin < grossProfitMarginMin && priceFastMa < 2)
+            {
+                Commentary("xxxxxxxxxxxxxxxxx 不符合条件...2-0 low gross: " + Text(debtCurrentGrossProfitMargin));
+                Return;
+            }
+            If(mainBusinessMidV < -3 && mainBusinessRevenueGrowthRatio_average_big < 10  && priceFastCredit < 0)
+            {
+                Commentary("xxxxxxxxxxxxxxxxx 不符合条件...2-22 low groth: " + Text(mainBusinessMidV));
+                Return;
+            }
+            If(mainBusinessRevenueGrowthRatio_average_big < -5 ||
+                ((mainBusinessRevenueGrowthRatio_average_fast + mainBusinessRevenueGrowthRatio) <  -5
+                && mainBusinessRevenueGrowthRatio_average_big < 10 && (priceBigCredit < 0 || priceFastCredit < 0)))
+            {// good efficent
+                Commentary("xxxxxxxxxxxxxxxxx 不符合条件...2-221 low groth: " + Text(mainBusinessRevenueGrowthRatio_average_big));
+                Return;
+            }
+            If(mainBusinessMidV < 20 && (npmFastMA < npmSlowMA) && npmCurrent < 40
+                && priceFastCredit < 0 && priceBigCredit < 0 && saleRevenueGrowthTTM > 4)
+            {
+                Commentary("xxxxxxxxxxxxxxxxx 不符合条件...2-23 low groth: " + Text(mainBusinessMidV));
+                Return;
+            }
+            If(npmFastMA < 8 || npmCurrent < 8 || npmCurrent >= 60)
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxxxxx npmFastMA is too low1: " + Text(npmFastMA));
+                Return;
+            }
+            If((npmFastMA < 10 || npmSlowMA < 8) && (npmUpsDownsAmplitude < 0 || priceFastCredit < 0) 
+                && (priceFastCredit < 0 || priceBigCredit < 0))
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxxxxx npmFastMA is too low2: " + Text(npmFastMA));
+                Return;
+            }
+            If(priceBigCredit < 0 && priceFastCredit < 0  && saleRevenueGrowthTTM_fastMA < 0)
+            {
+                Commentary("xxxxxxxxxxxxx 3-23-1 maybe is down....");
+                Return;
+            }
+            If(npmUpsDownsAmplitude <  0 && saleRevenueGrowthTTM_fastMA < 0)
+            {
+                Commentary("xxxxxxxxxxxxx 3-23-3 maybe is down....");
+                Return;
+            }
+            //==============================================
+            /*If(priceAndSaleCoefficient > 1 && saleRevenueGrowthTTM_fastMA < saleRevenueGrowthTTM_bigMA)
+            {
+                Commentary("xxxxxxxxxxx priceAndSaleCoefficient: "+Text(priceAndSaleCoefficient,2));
+                Return;
+            }*/
+            //==============================================
+            // good Effective
+            If((priceVelocityMid > 1.6 && priceVelocityBig > 1.9) || priceVelocityBig > 2)
+            {
+                Commentary("xxxxxxxxx priceVelocityMid: "+Text(priceVelocityMid)+" big: "+Text(priceVelocityBig));
+                If(longEntries > 0)
+                {
+                    Return;
+                }
+            }
+            If(psCoefficient > 1.4||priceVelocityShort > 1.15)
+            {
+                //immediatelyRisingStopPrice("!!! - Warning By psCoefficient",lastChatBar.dateTime);
+                Commentary("!!! - Warning By psCoefficient: "+Text(psCoefficient));
+            }
+            //==============================================
+            //=======================================================================
+            /*If(mainBusinessRevenueGrowthRatio > mainBusinessRevenueGrowthRatio_average_big * 2
+                && mainBusinessRevenueGrowthRatio > 70 && low < priceFastMa)
+            {
+                Commentary("xxxxxxxxxxxxx MainB is too high 3-1....");
+                immediatelyRisingStopPrice("xxxxxxxxxxx mainB too high 3-11. ",lastChatBar.dateTime,CurrentBar,"NORMAL");
+                Return;
+            }*/
+            If(npmFastMA < 30  && priceFastMa < 0.5)
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxxxxx roeFast + npmFastMA is too low: " + Text(npmFastCriditTrend));
+                Return;
+            }
+            If(roeFast + mainBusinessMidV < 15 && !npmCondition  && priceFastMa < 2)
+            {
+                    Commentary("xxxxxxxxxxxxxxxxxxxxxx roeFast + mainBusinessMidV is too low: " + Text(roeFast + mainBusinessMidV));
+                    Return;
+            }
+
+            //======================================================================================================
+            // good effective
+            If(mainBusinessRevenueGrowthRatio_average_big + npmStandart < 30 && (
+                mainBusinessRevenueGrowth_creditFast < 0 || npmFastCriditTrend < 0) 
+                && priceBigCredit <0 && priceFastCredit < 0)
+            {
+                Commentary("xxxxxxxxxxxxxxxxx 不符合条件...2-11-1 low growth: "+Text(mainBusinessMidV+ (roeBig + roeFast)/2));
+                Return;
+            }
+            //======================================================================================================
+            If(priceVelocityShort > 2.5 && priceFastCredit < 0)
+            {
+                immediatelyRisingStopPrice("--By priceVelocityShort: "+Text(priceVelocityShort),lastChatBar.dateTime,
+                    CurrentBar,"URGENT");
+                Commentary("xxxxxxxxxxxxx price too high priceVelocityShort: "+Text(priceVelocityShort));
+                Return;
+            }
+            //==========================================================================================
+
+            // Good effective
+            Numeric trAmplitude = trFastMa / trSlowMa;
+            If(trAmplitude > 1.4)
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxxxxxxx不符合条件 turnoverRate ...H1-B1 "+Text(trAmplitude));
+                Return;
+            }
+
+            // need add ,its a good effective
+            //High < High[1] || High < High[2] || High < High[3] || Close < Close[1]|| Close < Close[2]
+            //    || Close < Close[3] ||
+            If(Close < Close[15] || Close < Close[10] ||Close < Close[5] || Close < Close[1]
+                || Close < priceFastMa )
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxxxxxxx不符合条件...1 close isnot Max on three days "+ Text(priceFastCredit));
+                Return;
+            }
+            If(priceFastCredit < 0 || priceFastMa < priceSlowMa)
+            {
+                Commentary("xxxxxxxxxxxxxxxxxxxxxxxx不符合条件...2 close isnot Max on three days "+ Text(priceFastCredit));
+                Return;
+            }
+            If(saleRevenueGrowthTTM < saleRevenueGrowthTTM_slowMA)
+            {
+                Commentary("xxxxxxxxxxxxxxx saleRevenueGrowthTTM < slow SA-100");
+                Return;
+            }
+            If(isProhibatOpen && CurrentBar - prohibitIndex < 5)
+            {
+                Commentary("xxxxxxxxxxxxxxx isProhibatOpen: "+Qsc_bool_print(isProhibatOpen)+" "+Text(prohibatOpenDate));
+                Return;
+            }
+            Print(Text(lastChatBar.dateTime)+" ps: "+Text(saleRevenueGrowthTTM,2)
+                +" wave2Life : "+Text(wave2Life%10)+" -------wave2Life: "+Text(wave2Life));
+            // 
+            Print("----------"+Symbol+"-"+SymbolName+" npmAmplitude: "+Text(npmAmplitudePlusMainB,2)
+                +" stdPs: "+Text(calculateMultiYearsReachedPsByNpmAmplitudePlusMainB));
+            SetBarVar(FormulaName, "Sel*1*" + Symbol + "*" + SymbolName+"*"+Qsc_bool_print(isProhibatOpen));
+            
+            Commentary("--------------------1-CAN trade-------reasonableSaleRevenueGrowthTTM: ");
+            Return;
+        }
+    }
+//------------------------------------------------------------------------
+// 编译版本    2026/1/22 230208
+// 版权所有    caosq4000
+// 更改声明    TradeBlazer Software保留对TradeBlazer平台
+//            每一版本的TradeBlazer策略修改和重写的权利
