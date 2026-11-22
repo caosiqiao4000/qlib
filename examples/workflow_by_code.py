@@ -9,10 +9,16 @@ The interface of (1) is `qrun XXX.yaml`.  The interface of (2) is script like th
 """
 
 import os
+import sys
 
 # MLflow 3.12+ disables the local file-store backend by default.
 # The example uses the default file-store tracking URI, so opt back in.
 os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
+
+# Use local Qlib source code instead of the installed pyqlib package.
+_repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 
 import qlib
 from qlib.constant import REG_CN

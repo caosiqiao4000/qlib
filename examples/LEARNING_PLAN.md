@@ -5,7 +5,7 @@
 
 ## 第 1 周 · 跑通主干
 - [x] 读 [workflow_by_code.py](workflow_by_code.py)，与已注释的 [workflow_by_code.ipynb](workflow_by_code.ipynb) 逐段对照（2026-10-25 已为 notebook 添加 6 处分步说明）
-- [ ] 用 `qrun` 跑 [LightGBM/workflow_config_lightgbm_Alpha158.yaml](benchmarks/LightGBM/workflow_config_lightgbm_Alpha158.yaml)，理解 task 字典 ↔ YAML 同构
+- [x] 用 `qrun` 跑 [LightGBM/workflow_config_lightgbm_Alpha158.yaml](benchmarks/LightGBM/workflow_config_lightgbm_Alpha158.yaml)，理解 task 字典 ↔ YAML 同构（2026-11-08 已跑通，mlruns 有 recorder 结果）
 - [ ] 读 [benchmarks/README.md](benchmarks/README.md) 结果表，建立 IC 基准感（~0.04-0.05 正常）
 - [ ] **验收**：能默写 handler→dataset→model→recorder→backtest 链路
 
