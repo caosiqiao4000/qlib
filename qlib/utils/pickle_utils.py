@@ -59,6 +59,32 @@ SAFE_PICKLE_CLASSES: Set[Tuple[str, str]] = {
     ("qlib.data.dataset.handler", "DataHandlerLP"),
     ("qlib.data.dataset.loader", "StaticDataLoader"),
     ("qlib.data.dataset.weight", "Reweighter"),
+    # A handler cached with `to_pickle(..., dump_all=True)` (e.g. via a
+    # "file://.../handler.pkl" config) is pickled as its concrete class, so the
+    # handler, its data loader, its processors and the normalization functions
+    # they hold all have to be resolvable. Only the concrete classes that are
+    # actually stored in such dumps are listed; the abstract bases are not.
+    ("qlib.contrib.data.handler", "Alpha158"),
+    ("qlib.contrib.data.handler", "Alpha158vwap"),
+    ("qlib.contrib.data.handler", "Alpha360"),
+    ("qlib.contrib.data.handler", "Alpha360vwap"),
+    ("qlib.data.dataset.loader", "QlibDataLoader"),
+    ("qlib.data.dataset.loader", "NestedDataLoader"),
+    ("qlib.data.dataset.loader", "DataLoaderDH"),
+    ("qlib.data.dataset.processor", "DropnaLabel"),
+    ("qlib.data.dataset.processor", "DropCol"),
+    ("qlib.data.dataset.processor", "FilterCol"),
+    ("qlib.data.dataset.processor", "TanhProcess"),
+    ("qlib.data.dataset.processor", "ProcessInf"),
+    ("qlib.data.dataset.processor", "Fillna"),
+    ("qlib.data.dataset.processor", "MinMaxNorm"),
+    ("qlib.data.dataset.processor", "ZScoreNorm"),
+    ("qlib.data.dataset.processor", "RobustZScoreNorm"),
+    ("qlib.data.dataset.processor", "CSZScoreNorm"),
+    ("qlib.data.dataset.processor", "CSRankNorm"),
+    ("qlib.data.dataset.processor", "CSZFillna"),
+    ("qlib.utils.data", "zscore"),
+    ("qlib.utils.data", "robust_zscore"),
     # qlib model classes
     ("qlib.contrib.model.gbdt", "LGBModel"),
     # lightgbm internal
