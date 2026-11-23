@@ -5,21 +5,37 @@ The motivation of this demo
 - To show the data modules of Qlib is Serializable, users can dump processed data to disk to avoid duplicated data preprocessing
 """
 
+import os
 from copy import deepcopy
 from pathlib import Path
 import pickle
 from pprint import pprint
 from ruamel.yaml import YAML
 import subprocess
+import sys
+
+# For general purpose, we use relative path
+DIRNAME = Path(__file__).absolute().resolve().parent
+
+# MLflow 3.12+ disables the local file-store backend by default.
+# `task_train` uses the default file-store tracking URI, so opt back in.
+os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
+
+# Use local Qlib source code instead of the installed pyqlib package.
+# `sys.path[0]` is this script's directory, so the repository root has to be added
+# explicitly; PYTHONPATH is exported as well so that the child processes keep using
+# the same source code. This makes the demo runnable with any interpreter from any
+# working directory, e.g. `python examples/data_demo/data_mem_resuse_demo.py`.
+ROOT = DIRNAME.parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+os.environ["PYTHONPATH"] = os.pathsep.join([p for p in [str(ROOT), os.environ.get("PYTHONPATH")] if p])
 
 from qlib import init
 from qlib.data.dataset.handler import DataHandlerLP
 from qlib.log import TimeInspector
 from qlib.model.trainer import task_train
 from qlib.utils import init_instance_by_config
-
-# For general purpose, we use relative path
-DIRNAME = Path(__file__).absolute().resolve().parent
 
 if __name__ == "__main__":
     init()

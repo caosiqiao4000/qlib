@@ -52,3 +52,4 @@ node_modules/
 ./pretrain
 .idea/
 .aider*
+qlib_bin.tar.gz

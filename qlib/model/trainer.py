@@ -27,6 +27,7 @@ from qlib.utils import (
     flatten_dict,
     init_instance_by_config,
 )
+from qlib.utils.data import deepcopy_basic_type
 from qlib.utils.paral import call_in_subproc
 from qlib.utils.pickle_utils import validate_trusted
 from qlib.workflow import R
@@ -61,7 +62,15 @@ def _exe_task(task_config: dict):
     R.save_objects(**{"dataset": dataset})
     # fill placehorder
     placehorder_value = {"<MODEL>": model, "<DATASET>": dataset}
-    task_config = fill_placeholder(task_config, placehorder_value)
+    # `fill_placeholder` replaces placeholders in place.  The task config is often reused
+    # (e.g. trained several times or used to derive new tasks), so the placeholders are
+    # filled on a copy of the config instead of on the caller's dict.  Otherwise the model
+    # and dataset created above would leak into the caller's config and would then be
+    # picked up by the next task, whose records would be generated from stale objects
+    # (a copied handler even loses its processed data like `_infer`).
+    # `deepcopy_basic_type` copies only the container structure, so reusable objects such
+    # as a processed handler passed in by the user are still shared instead of copied.
+    task_config = fill_placeholder(deepcopy_basic_type(task_config), placehorder_value)
     # generate records: prediction, backtest, and analysis
     records = task_config.get("record", [])
     if isinstance(records, dict):  # prevent only one dict
